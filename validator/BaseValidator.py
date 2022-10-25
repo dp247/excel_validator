@@ -1,11 +1,12 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 
+
 class BaseValidator:
     __metaclass__ = ABCMeta
 
     trim = False
 
-    @abstractproperty
+    @abstractmethod
     def message(self):
         pass
 

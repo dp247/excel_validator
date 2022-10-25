@@ -1,4 +1,4 @@
-header: "ID" #if set script will find this "header row" and will start parsing from next line
+header: 1
 excludes: ["L"] #these columns will be not validated
 
 #range: ["A","D"]
@@ -11,6 +11,11 @@ validators:
     default:
         - NotBlank:
             message: Value can not be blank
+
+    header:
+        - Order:
+            items: ["ID", "Title", "First Name", "Last Name", "Gender", "Country", "Email", "Quantity", "Price", "In Stock", "Order Date", "Address"]
+
 
     #default validator is used for not excluded columns for which no other validation rule is set
 
