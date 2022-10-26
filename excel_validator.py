@@ -6,7 +6,7 @@ import sys
 import time
 import yaml
 from openpyxl.reader.excel import load_workbook
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import column_index_from_string, get_column_letter
 from progress.bar import Bar
 from validator import *
@@ -39,10 +39,10 @@ def is_valid(type, value, coordinate=None, errors=None, value2=None):
 
     # conditional validator will take two arguments to evaluate
 
-    if name != 'Conditional' or name != 'Order':
-        result = validator.validate(value)
-    else:
+    if name == 'Conditional':
         result = validator.validate(value, value2)
+    else:
+        result = validator.validate(value)
 
     # If the cell value breaks the validation rule , append violations list
     if not result:
@@ -53,16 +53,16 @@ def is_valid(type, value, coordinate=None, errors=None, value2=None):
 
     # return result != False
     # result is the output of each validation for each cell
-    if not result:
-        return False
-    else:
-        return True
+    # if not result:
+    #     return False
+    # else:
+    #     return True
+    return result
 
 
 def set_settings(config):
     """function takes the config yaml file and converts it to dictionary
     """
-    global stream
     settings = {}
 
     # excludes are the columns that we won't validate
@@ -82,7 +82,7 @@ def set_settings(config):
         if 'columns' in config.get('validators'):
             settings['validators'] = config.get('validators').get('columns')
         if 'header' in config.get('validators'):
-            settings['header_validators'].append(config.get('validators').get('header'))
+            settings['header_validators'] = config.get('validators').get('header')
     else:
         return False
 
@@ -112,74 +112,95 @@ def set_settings(config):
 
 
 def mark_errors(errors, excelFile, sheetName, tmpDir, printErrors=False, noSizeLimit=False):
-    ''' Function takes the error lists (coordinates,violations) , excel file , sheet name
+    """ Function takes the error lists (coordinates,violations) , excel file , sheet name
     output directory
-    '''
-    progressBar = Bar('Processing', max=len(errors))
+    """
+    progress_bar = Bar('Processing', max=len(errors))
 
     if printErrors is not None:
         print("Log broken cells")
         for error in errors:
-            progressBar.next()
+            progress_bar.next()
             print(" Broken Excel cell: " + error[0] + " [ " + ','.join(error[1]) + " ]")
-        progressBar.finish()
+        progress_bar.finish()
 
         return
 
     # Checking size of the file
-    isFileTooBig = os.path.getsize(excelFile) > 10485760
+    file_too_big = os.path.getsize(excelFile) > 10485760
 
-    if isFileTooBig is True and noSizeLimit is False:
+    if file_too_big is True and noSizeLimit is False:
         return -1
 
     # open Excel file
-    newFile = os.path.join(tmpDir,
-                           "errors_" + time.strftime("%Y-%m-%d") + "_" + str(int(time.time())) + "_" + os.path.basename(
-                               excelFile))
-    fileName, fileExtension = os.path.splitext(excelFile)
+    error_file_name = "errors_" + time.strftime("%Y-%m-%d") + "_" + str(
+                                int(time.time())) + "_" + os.path.basename(
+                                excelFile)
+    new_file = os.path.join(tmpDir, error_file_name)
+    file_name, file_extension = os.path.splitext(excelFile)
 
-    if fileExtension == '.xlsm':
+    if file_extension == '.xlsm':
         wb = load_workbook(excelFile, keep_vba=True, data_only=True)
     else:
         wb = load_workbook(excelFile, data_only=True)
 
     creator = wb.properties.creator
-    ws = wb.get_sheet_by_name(sheetName)
+    ws = wb[sheetName]
 
     # fill the error values with red pattern
 
-    redFill = PatternFill(start_color='FFFF0000',
-                          end_color='FFFF0000',
-                          fill_type='solid')
+    red_fill = PatternFill(start_color='FFFF0000',
+                           end_color='FFFF0000',
+                           fill_type='solid')
 
     for error in errors:
-        progressBar.next()
+        progress_bar.next()
 
-        print(" Broken Excel cell: " + error[0])
-        cell = ws[error[0]]
-        if printErrors:
-            cell.value = ','.join(error[1])
-        cell.fill = redFill
+        print("Error found at: " + error[0])
+        if len(error[0]) == 2:
+            cell = ws[error[0]]
+            if printErrors:
+                cell.value = ','.join(error[1])
+            cell.fill = red_fill
+        else:
+            message_split = error[0].split(" ")
+            if message_split[0] == "Row":
+                for cell in ws[message_split[1]]:
+                    if hasattr(cell, 'column') and cell.column in settings['excludes']:
+                        continue
+                    cell.fill = red_fill
 
-    progressBar.finish()
+    progress_bar.finish()
 
-    # save error excel file
+    wb.create_sheet("Log")
+    sheet = wb["Log"]
+    first_row = sheet.row_dimensions[1]
+    first_row.font = Font(bold=True)
+    sheet['A1'] = "Errors"
+    sheet.insert_rows(2, len(errors) + 1)
+
+    # TODO: Split this into two columns
+    for idx, item in enumerate(errors):
+        sheet.cell(column=1, row=idx+1, value=str(item))
+
+
+    # save error log excel file
     wb.properties.creator = creator
-    print("[[Save file: " + newFile + "]]")
+    print("[[Save file: " + new_file + "]]")
 
     try:
-        wb.save(newFile)
-    except Exception as e:
-        print(e)
+        wb.save(new_file)
+    except Exception as ex:
+        print(ex)
         exit(1)
 
-    return newFile
+    return new_file
 
 
 def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLimit=False):
-    '''the main function of valitations, takes settings dictionary (validations)
+    """the main function of validations, takes settings dictionary (validations)
     and returns the validation result
-    '''
+    """
     print("Validate Excel Sheet " + sheetName)
 
     errors = []
@@ -189,57 +210,70 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
     # ws = wb.get_sheet_by_name(sheetName)
     ws = wb[sheetName]
 
-    progressBar = Bar('Processing', max=ws.max_row)
+    progress_bar = Bar('Processing', max=ws.max_row)
 
     if 'range' in settings and settings['range'] is not None:
         settings['range'] = settings['range'] + str(ws.max_row)
     # range now equals A1:D(150) for example
 
-    # iterate excel sheet
-    rowCounter = 0
+    # iterate Excel sheet
+    row_counter = 1
     header_row = 0
     if settings['header'] is not None:
         header_row = settings['header']
     for row in ws.iter_rows(settings['range']):
-        progressBar.next()
-        columnCounter = 0
-        rowCounter += 1
+        progress_bar.next()
+        column_counter = 0
         # do not parse empty rows
         if is_empty(row):
             continue
-        if rowCounter == header_row:
-            if 'header' in settings['header_validators']:
-                # TODO: Get each type of validator from header
-                for type in settings['header_validators']["header"]:
-                    name = list(type.keys())[0]
+        if row_counter == header_row:
+            coordinates = "Row " + str(header_row)
+            # Get the validators for the headers from the yaml file
+            for type in settings['header_validators']:
+                name = list(type.keys())[0]
+                if name == 'Order':
+                    value = []
+                    try:
+                        for cell in ws[header_row]:
+                            if hasattr(cell, 'column') and cell.column in settings['excludes']:
+                                continue
+                            value.append(cell.value)
+                    except ValueError:
+                        errors.append((coordinates, ValueError))
+                    res = is_valid(type, value, coordinates, errors)
+                    if not res:
+                        break
+                    # row_counter += 1
+                    # break
 
         for cell in row:
-            columnCounter = columnCounter + 1
+            column_counter = column_counter + 1
             try:
                 value = cell.value
             except ValueError:
                 # case when it is not possible to read value at all from any reason
-                column = get_column_letter(columnCounter)
-                coordinates = "%s%d" % (column, rowCounter)
+                column = get_column_letter(column_counter)
+                coordinates = "%s%d" % (column, row_counter)
                 errors.append((coordinates, ValueError))
 
             # skip excludes column
             if hasattr(cell, 'column') and cell.column in settings['excludes']:
                 continue
 
-            column = get_column_letter(columnCounter)
-            coordinates = "%s%d" % (column, rowCounter)
+            column = get_column_letter(column_counter)
 
-            ## column:A Coordinate:A2, for example
+            #TODO: Implement skip header row number
+            coordinates = "%s%d" % (column, row_counter)
 
             if column in settings['validators']:
                 for type in settings['validators'][column]:
-                    name = list(type.keys())[0]  # notblank, Regex, Length
+                    name = list(type.keys())[0]  # not-blank, Regex, Length
                     if name != 'Conditional':
                         res = is_valid(type, value, coordinates, errors)
                     else:
-                        fieldB = list(type.values())[0]['fieldB']
-                        value2 = ws[fieldB + str(rowCounter)].value
+                        field_b = list(type.values())[0]['field_b']
+                        value2 = ws[field_b + str(row_counter)].value
                         res = is_valid(type, value, coordinates, errors, value2)
                     if not res:
                         break
@@ -247,18 +281,21 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
             elif settings['defaultValidator'] is not None:
                 is_valid(settings['defaultValidator'], value, coordinates, errors)
 
-    progressBar.finish()
+            row_counter += 1
+            break
+
+    progress_bar.finish()
 
     print("Found %d error(s)" % len(errors))
-    if (len(errors) > 0):
+    if len(errors) > 0:
         return mark_errors(errors, excelFile, sheetName, tmpDir, printErrors, noSizeLimit)
 
     return True
 
 
 def is_empty(row):
-    ''' function to get if the row is empty or not
-    '''
+    """ function to get if the row is empty or not
+    """
     for cell in row:
         if cell.value:
             return False
@@ -280,13 +317,21 @@ if __name__ == '__main__':
 
     settings = set_settings(args.config)
 
+    excel_folder = os.path.dirname(args.file)
+
+    if not os.path.exists(args.tmpDir):
+        excel_folder = os.path.dirname(args.file)
+        os.chdir(excel_folder)
+        os.makedirs(os.path.join(os.getcwd(), "temp"), exist_ok=True)
+        args.tmpDir = os.path.join(os.getcwd(), "temp")
+
     if not settings:
         sys.exit("Incorrect config file " + args.config)
 
     try:
         results = validate(settings, args.file, args.sheetName, args.tmpDir, args.errors, args.no_file_size_limit)
     except Exception as e:
-        sys.exit("Error occured: " + str(e))
+        sys.exit("Error occurred: " + str(e))
 
     # if result = True that means file is originally true and all values are correct
     # if result != True and not equal None, get result file name

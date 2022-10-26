@@ -14,7 +14,7 @@ validators:
 
     header:
         - Order:
-            items: ["ID", "Title", "First Name", "Last Name", "Gender", "Country", "Email", "Quantity", "Price", "In Stock", "Order Date", "Address"]
+            items: ["ID", "", "Title", "First Name", "Last Name", "Gender", "Country", "Email", "Quantity", "Price", "In Stock", "Order Date", "Address"]
 
 
     #default validator is used for not excluded columns for which no other validation rule is set

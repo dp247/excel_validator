@@ -1,17 +1,22 @@
+import functools
 from validator.BaseValidator import BaseValidator
+
 
 class OrderValidator(BaseValidator):
     message = "The order is not valid"
 
-    def validate(self, values):
-        # possible null values
-        # value = super(OrderValidator, self).validate(value)
-        for value in values:
-
+    def validate(self, value):
+        # value = items from Excel doc
+        # ext_items = items from YAML file
+        value = super(OrderValidator, self).validate(value)
+        if functools.reduce(lambda x, y: x and y, map(lambda p, q: p == q, value, self.ext_items), True):
+            return True
+        return False
 
     def __init__(self, params):
         super(OrderValidator, self).__init__(params)
 
-        if not 'items' in params:
-            raise ValueError("Item order not set")
-        self.choices = params.get('items')
+        if 'items' not in params:
+            raise ValueError("Header values not found in worksheet.")
+
+        self.ext_items = params.get('items')
