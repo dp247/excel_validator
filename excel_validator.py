@@ -134,8 +134,8 @@ def mark_errors(errors, excelFile, sheetName, tmpDir, printErrors=False, noSizeL
 
     # open Excel file
     error_file_name = "errors_" + time.strftime("%Y-%m-%d") + "_" + str(
-                                int(time.time())) + "_" + os.path.basename(
-                                excelFile)
+        int(time.time())) + "_" + os.path.basename(
+        excelFile)
     new_file = os.path.join(tmpDir, error_file_name)
     file_name, file_extension = os.path.splitext(excelFile)
 
@@ -174,15 +174,16 @@ def mark_errors(errors, excelFile, sheetName, tmpDir, printErrors=False, noSizeL
 
     wb.create_sheet("Log")
     sheet = wb["Log"]
-    first_row = sheet.row_dimensions[1]
-    first_row.font = Font(bold=True)
-    sheet['A1'] = "Errors"
+    sheet['A1'] = "Location"
+    sheet['B1'] = "Validation error"
+    ws['A1'].font = Font(bold=True)
+    ws['B1'].font = Font(bold=True)
     sheet.insert_rows(2, len(errors) + 1)
 
     # TODO: Split this into two columns
     for idx, item in enumerate(errors):
-        sheet.cell(column=1, row=idx+1, value=str(item))
-
+        sheet.cell(column=1, row=idx + 2, value=str(item[0]))
+        sheet.cell(column=2, row=idx + 2, value=str(item[1]))
 
     # save error log excel file
     wb.properties.creator = creator
@@ -207,13 +208,13 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
     # open Excel file
     print("Parse Excel file")
     wb = load_workbook(excelFile, keep_vba=True, data_only=True, read_only=True)
-    # ws = wb.get_sheet_by_name(sheetName)
     ws = wb[sheetName]
 
     progress_bar = Bar('Processing', max=ws.max_row)
 
     if 'range' in settings and settings['range'] is not None:
         settings['range'] = settings['range'] + str(ws.max_row)
+
     # range now equals A1:D(150) for example
 
     # iterate Excel sheet
@@ -238,14 +239,13 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
                         for cell in ws[header_row]:
                             if hasattr(cell, 'column') and cell.column in settings['excludes']:
                                 continue
+                            current_row_coords = cell.coordinate
                             value.append(cell.value)
                     except ValueError:
-                        errors.append((coordinates, ValueError))
+                        errors.append((current_row_coords, ValueError))
                     res = is_valid(type, value, coordinates, errors)
                     if not res:
                         break
-                    # row_counter += 1
-                    # break
 
         for cell in row:
             column_counter = column_counter + 1
@@ -263,7 +263,8 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
 
             column = get_column_letter(column_counter)
 
-            #TODO: Implement skip header row number
+            # TODO: Implement skip header row number
+            # This will solve the mismatch in errors here vs the source repo
             coordinates = "%s%d" % (column, row_counter)
 
             if column in settings['validators']:
@@ -272,7 +273,7 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
                     if name != 'Conditional':
                         res = is_valid(type, value, coordinates, errors)
                     else:
-                        field_b = list(type.values())[0]['field_b']
+                        field_b = list(type.values())[0]['fieldB']
                         value2 = ws[field_b + str(row_counter)].value
                         res = is_valid(type, value, coordinates, errors, value2)
                     if not res:
@@ -280,10 +281,7 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
 
             elif settings['defaultValidator'] is not None:
                 is_valid(settings['defaultValidator'], value, coordinates, errors)
-
-            row_counter += 1
-            break
-
+        row_counter += 1
     progress_bar.finish()
 
     print("Found %d error(s)" % len(errors))
