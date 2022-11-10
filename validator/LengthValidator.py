@@ -1,7 +1,7 @@
 from validator.BaseValidator import BaseValidator
 
-class LengthValidator(BaseValidator):
 
+class LengthValidator(BaseValidator):
     min = None
     max = None
     minMessage = "Min length error"
@@ -10,7 +10,7 @@ class LengthValidator(BaseValidator):
 
     def validate(self, value):
 
-        #possible null values
+        # possible null values
         if value is None:
             return True
 
