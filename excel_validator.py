@@ -261,6 +261,10 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
             if hasattr(cell, 'column') and cell.column in settings['excludes']:
                 continue
 
+            # if cell row is header row, skip it (header row is already validated)
+            if hasattr(cell, 'column') and cell.row == header_row:
+                continue
+
             column = get_column_letter(column_counter)
 
             # TODO: Implement skip header row number
