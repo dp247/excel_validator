@@ -270,6 +270,7 @@ def validate(settings, excelFile, sheetName, tmpDir, printErrors=False, noSizeLi
 
             # TODO: Implement skip header row number
             # This will solve the mismatch in errors here vs the source repo
+            # Replace with cell.coordinate?
             coordinates = "%s%d" % (column, row_counter)
 
             if column in settings['validators']:
@@ -333,10 +334,7 @@ if __name__ == '__main__':
     if not settings:
         sys.exit("Incorrect config file " + args.config)
 
-    try:
-        results = validate(settings, args.file, args.sheetName, args.tmpDir, args.errors, args.no_file_size_limit)
-    except Exception as e:
-        sys.exit("Error occurred: " + str(e))
+    results = validate(settings, args.file, args.sheetName, args.tmpDir, args.errors, args.no_file_size_limit)
 
     # if result = True that means file is originally true and all values are correct
     # if result != True and not equal None, get result file name
