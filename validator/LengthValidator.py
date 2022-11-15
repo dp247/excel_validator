@@ -21,12 +21,12 @@ class LengthValidator(BaseValidator):
 
         if self.min is not None and len(value) < self.min:
             if self.minMessage is not None:
-                self.message = self.minMessage;
+                self.message = self.minMessage
             return False
 
         if self.max is not None and len(value) > self.max:
             if self.maxMessage is not None:
-                self.message = self.maxMessage;
+                self.message = self.maxMessage
             return False
 
     def __init__(self, params):
