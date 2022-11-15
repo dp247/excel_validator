@@ -29,6 +29,8 @@ class LengthValidator(BaseValidator):
                 self.message = self.maxMessage
             return False
 
+        return True
+
     def __init__(self, params):
         super(LengthValidator, self).__init__(params)
 
