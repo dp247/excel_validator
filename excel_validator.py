@@ -10,6 +10,7 @@ from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import column_index_from_string, get_column_letter
 from progress.bar import Bar
 from validator import *
+import faulthandler
 
 
 def is_valid(type, value, coordinate=None, errors=None, value2=None):
@@ -306,6 +307,8 @@ def is_empty(row):
 
 
 if __name__ == '__main__':
+
+    faulthandler.enable()
 
     parser = argparse.ArgumentParser(description='Mark validation errors in Excel sheet.')
     parser.add_argument('config', metavar='config', help='Path to YAML config file')
