@@ -5,6 +5,8 @@ import os.path
 import sys
 import time
 import yaml
+from alive_progress import alive_bar, styles
+from yaspin import yaspin
 from openpyxl.reader.excel import load_workbook
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import column_index_from_string, get_column_letter
@@ -116,85 +118,89 @@ def mark_errors(errors, excelFile, sheetName, tmpDir, printErrors=False, noSizeL
     """ Function takes the error lists (coordinates,violations) , excel file , sheet name
     output directory
     """
-    progress_bar = Bar('Processing', max=len(errors))
-
+    print("")
     if printErrors is not None:
-        print("Log broken cells")
         for error in errors:
-            progress_bar.next()
-            print(" Broken Excel cell: " + error[0] + " [ " + ','.join(error[1]) + " ]")
-        progress_bar.finish()
-
+            print(f"Broken Excel cell: {error[0]} [{error[1]}]")
         return
 
     # Checking size of the file
-    file_too_big = os.path.getsize(excelFile) > 10485760
-
-    if file_too_big is True and noSizeLimit is False:
-        return -1
+    with yaspin(text="Checking Excel file size") as sp:
+        file_too_big = os.path.getsize(excelFile) > 10485760
+        if file_too_big is True and noSizeLimit is False:
+            return -1
+        sp.ok("✅ ")
 
     # open Excel file
-    error_file_name = "errors_" + time.strftime("%Y-%m-%d") + "_" + str(
-        int(time.time())) + "_" + os.path.basename(
-        excelFile)
-    new_file = os.path.join(tmpDir, error_file_name)
-    file_name, file_extension = os.path.splitext(excelFile)
+    with yaspin(text="Setting up Excel file") as sp:
+        error_file_name = "errors_" + time.strftime("%Y-%m-%d") + "_" + str(
+            int(time.time())) + "_" + os.path.basename(
+            excelFile)
+        new_file = os.path.join(tmpDir, error_file_name)
+        file_name, file_extension = os.path.splitext(excelFile)
 
-    if file_extension == '.xlsm':
-        wb = load_workbook(excelFile, keep_vba=True, data_only=True)
-    else:
-        wb = load_workbook(excelFile, data_only=True)
-
-    creator = wb.properties.creator
-    ws = wb[sheetName]
-
-    # fill the error values with red pattern
-
-    red_fill = PatternFill(start_color='FFFF0000',
-                           end_color='FFFF0000',
-                           fill_type='solid')
-
-    for error in errors:
-        progress_bar.next()
-
-        print("Error found at: " + error[0])
-        if len(error[0]) == 2:
-            cell = ws[error[0]]
-            if printErrors:
-                cell.value = ','.join(error[1])
-            cell.fill = red_fill
+        if file_extension == '.xlsm':
+            try:
+                wb = load_workbook(excelFile, keep_vba=True, data_only=True)
+            except Exception as ex:
+                sp.fail(f"Exception encountered: {ex}")
         else:
-            message_split = error[0].split(" ")
-            if message_split[0] == "Row":
-                for cell in ws[message_split[1]]:
-                    if hasattr(cell, 'column') and cell.column in settings['excludes']:
-                        continue
-                    cell.fill = red_fill
+            try:
+                wb = load_workbook(excelFile, data_only=True)
+            except Exception as ex:
+                sp.fail(f"Exception encountered: {ex}")
 
-    progress_bar.finish()
+        creator = wb.properties.creator
+        ws = wb[sheetName]
 
-    wb.create_sheet("Log")
-    sheet = wb["Log"]
-    sheet['A1'] = "Location"
-    sheet['B1'] = "Validation error"
-    ws['A1'].font = Font(bold=True)
-    ws['B1'].font = Font(bold=True)
-    sheet.insert_rows(2, len(errors) + 1)
+        # fill the error values with red pattern
+        red_fill = PatternFill(start_color='FFFF0000',
+                               end_color='FFFF0000',
+                               fill_type='solid')
+        sp.ok("✅ ")
 
-    # TODO: Split this into two columns
-    for idx, item in enumerate(errors):
-        sheet.cell(column=1, row=idx + 2, value=str(item[0]))
-        sheet.cell(column=2, row=idx + 2, value=str(item[1]))
+    with alive_bar(len(errors), title="Processing errors", bar='classic', elapsed=False, stats=False) as bar:
+        for error in errors:
+            bar.text = f"Error found at: {error[0]}"
+            if len(error[0]) == 2:
+                cell = ws[error[0]]
+                if printErrors:
+                    cell.value = ','.join(error[1])
+                cell.fill = red_fill
+            else:
+                message_split = error[0].split(" ")
+                if message_split[0] == "Row":
+                    for cell in ws[message_split[1]]:
+                        if hasattr(cell, 'column') and cell.column in settings['excludes']:
+                            continue
+                        cell.fill = red_fill
+            bar()
 
-    # save error log excel file
-    wb.properties.creator = creator
-    print("[[Save file: " + new_file + "]]")
+    with yaspin(text="Logging errors to file") as sp:
+        wb.create_sheet("Log")
+        sheet = wb["Log"]
+        sheet['A1'] = "Location"
+        sheet['B1'] = "Validation error"
+        ws['A1'].font = Font(bold=True)
+        ws['B1'].font = Font(bold=True)
+        sheet.insert_rows(2, len(errors) + 1)
 
-    try:
-        wb.save(new_file)
-    except Exception as ex:
-        print(ex)
-        exit(1)
+        # TODO: Split this into two columns
+        for idx, item in enumerate(errors):
+            # sp.text(f"Writing to row {idx + 2}")
+            sheet.cell(column=1, row=idx + 2, value=str(item[0]))
+            sheet.cell(column=2, row=idx + 2, value=str(item[1]))
+
+        # save error log excel file
+        wb.properties.creator = creator
+
+        try:
+            wb.save(new_file)
+            sp.text = new_file
+            sp.ok(f"✅ Saved file at: ")
+        except Exception as ex:
+            sp.fail(f"Error saving file: {ex}")
+            exit(1)
 
     return new_file
 
